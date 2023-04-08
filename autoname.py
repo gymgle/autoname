@@ -3,11 +3,13 @@
 
 import argparse
 import os.path
-import exifread
-from sys import exit
+import platform
 from datetime import datetime, timezone
-from hachoir.parser import createParser
+from sys import exit
+
+import exifread
 from hachoir.metadata import extractMetadata
+from hachoir.parser import createParser
 
 # Define version
 Version = '0.1.0'
@@ -65,15 +67,21 @@ def rename_media(filepath: str) -> bool:
         metadata = extractMetadata(ps)
     exif_dict = metadata.exportDictionary()['Metadata']
     exif_date = str(exif_dict.get('Creation date', '1904-01-01 00:00:00'))  # maybe before 1970 (1904-01-01...)
-    if datetime.strptime(exif_date, '%Y-%m-%d %H:%M:%S').timestamp() > 0:
+    try:
+        ts = datetime.strptime(exif_date, '%Y-%m-%d %H:%M:%S').timestamp()
+    except OSError:
+        ts = 0.0
+    if ts > 0:
         utc_time = datetime.strptime(exif_date, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
         local_time = utc_time.astimezone(datetime.now().astimezone().tzinfo)
     else:  # no metadata found, use the min timestamp in birthtime / ctime / mtime
         file_stat = os.stat(filepath)
         dt_list = []
-        for i in [int(file_stat.st_birthtime), int(file_stat.st_ctime), int(file_stat.st_mtime)]:
+        for i in [int(file_stat.st_ctime), int(file_stat.st_mtime)]:
             if i > 0:
                 dt_list.append(i)
+        if platform.system().lower() == 'darwin':  # birthtime in macOS
+            dt_list.append(int(file_stat.st_birthtime))
         ctime = min(dt_list)
         local_time = datetime.fromtimestamp(ctime)
     return rename_with_datetime(filepath, local_time)
