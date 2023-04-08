@@ -51,8 +51,7 @@ def rename_photo(filepath: str) -> bool:
         rename_with_datetime(filepath, datetime.strptime(exif_date, '%Y:%m:%d %H:%M:%S'))
     else:
         print('no EXIF DateTimeOriginal tag found:', filepath)
-        if ct_enabled:
-            return rename_media(filepath)
+        return rename_media(filepath)
     return True
 
 
@@ -148,8 +147,6 @@ if __name__ == '__main__':
                         help='rename only for video type')
     parser.add_argument('-pv', '--preview', action='store_true', default=False,
                         help='preview new filename without rename')
-    parser.add_argument('-ct', '--create-time', action='store_true', default=False,
-                        help='use the media create time if no EXIF found')
     parser.add_argument('-v', '--version', action='store_true', help='show version', default=False)
     args = vars(parser.parse_args())
     file_path = args.get('path', '')
@@ -157,7 +154,6 @@ if __name__ == '__main__':
     file_datetime = args.get('datetime', '')
     only_image = args.get('only_image', False)
     only_video = args.get('only_video', False)
-    ct_enabled = args.get('create_time', False)
     preview = args.get('preview', False)
     version = args.get('version', False)
 
