@@ -52,7 +52,6 @@ def rename_photo(filepath: str) -> bool:
         exif_date = str(tags['EXIF DateTimeOriginal'])
         rename_with_datetime(filepath, datetime.strptime(exif_date, '%Y:%m:%d %H:%M:%S'))
     else:
-        print('no EXIF DateTimeOriginal tag found:', filepath)
         return rename_media(filepath)
     return True
 
@@ -98,18 +97,23 @@ def rename_with_datetime(filepath: str, exif_date: datetime) -> bool:
     new_name = date_taken + os.path.splitext(filepath)[-1].lower()
     new_path = os.path.join(os.path.dirname(filepath), new_name)
     if filepath == new_path:  # Skip already in demanded name
-        print('skip:', os.path.split(filepath)[-1])
+        print('skip:', os.path.basename(filepath))
         return True
     if preview:
-        print(os.path.split(filepath)[-1], '->', os.path.split(new_path)[-1])
-    else:
-        # Dangerous Ops: Rename
-        # Skip if new path exist
-        if os.path.exists(new_path):
-            print('same filename exist:', os.path.split(filepath)[-1], '->', os.path.split(new_path)[-1])
-            return False
-        os.rename(filepath, new_path)
-        print('success:', os.path.split(filepath)[-1], '->', os.path.split(new_path)[-1])
+        print(os.path.basename(filepath), '->', os.path.basename(new_path))
+        return True
+
+    # Dangerous Ops: Rename
+    # Change name if the new path exist: add the timestamp after the date taken
+    if os.path.exists(new_path):
+        print('same filename exist:', os.path.basename(filepath), '->', os.path.basename(new_path))
+        ts = datetime.now().timestamp() * 1000
+        new_name = '{date}-{timestamp}{ext}'.format(date=date_taken, timestamp=str(int(ts)),
+                                                    ext=os.path.splitext(filepath)[-1].lower())
+        new_path = os.path.join(os.path.dirname(filepath), new_name)
+    os.rename(filepath, new_path)
+    print('success:', os.path.basename(filepath), '->', os.path.basename(new_path))
+
     return True
 
 
