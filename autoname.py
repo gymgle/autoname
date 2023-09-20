@@ -12,7 +12,7 @@ from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
 
 # Define version
-Version = '0.1.1'
+Version = '0.2.0'
 
 # File Extension Definition
 Photos = ['.jpg', '.jpeg', '.heic', '.png', '.gif']
