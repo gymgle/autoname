@@ -12,30 +12,39 @@ from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
 
 # Define version
-Version = '0.1.0'
+Version = '0.1.1'
 
 # File Extension Definition
-Photos = ['.jpg', '.jpeg', '.heic', '.png']
+Photos = ['.jpg', '.jpeg', '.heic', '.png', '.gif']
 Videos = ['.mp4', '.mov']
 
 
-def auto_rename() -> bool:
+def auto_rename(file_path: str) -> bool:
     """
     Auto rename
+    :param file_path: str, path to directory
     :return: bool: success
     """
     for filename in os.listdir(file_path):
-        file_ext = os.path.splitext(filename)[-1].lower()
-        if file_ext in Photos:
-            if only_video:
-                continue
-            rename_photo(os.path.join(file_path, filename))
-        elif file_ext in Videos:
-            if only_image:
-                continue
-            rename_media(os.path.join(file_path, filename))
+        abs_filename = os.path.join(file_path, filename)
+        if os.path.isfile(abs_filename):
+            file_ext = os.path.splitext(filename)[-1].lower()
+            if file_ext in Photos:
+                if only_video:
+                    continue
+                rename_photo(abs_filename)
+            elif file_ext in Videos:
+                if only_image:
+                    continue
+                rename_media(abs_filename)
+            else:
+                print('unsupported file format:', filename)
+        elif os.path.isdir(abs_filename):
+            print('directory:', abs_filename)
+            if recursion:
+                auto_rename(abs_filename)
         else:
-            print('unsupported file format:', filename)
+            print('unknown file:', filename)
     return True
 
 
@@ -46,7 +55,11 @@ def rename_photo(filepath: str) -> bool:
     :return:
     """
     with open(filepath, 'rb') as f:
-        tags = exifread.process_file(f)
+        try:
+            tags = exifread.process_file(f)
+        except Exception as e:
+            print(f'get exif tags from %s error: %s' % (filepath, e))
+            tags = dict()
 
     if 'EXIF DateTimeOriginal' in tags:
         exif_date = str(tags['EXIF DateTimeOriginal'])
@@ -123,11 +136,11 @@ def test_func() -> (bool, str):
     :return: (bool, str), bool: valid or not, str: error msg
     """
     # Check file path
-    if not file_path:
+    if not dir_path:
         return False, 'file path need to be specified with -p argument'
 
-    if not os.path.exists(file_path):
-        return False, f'{file_path} is not exist'
+    if not os.path.exists(dir_path):
+        return False, f'{dir_path} is not exist'
 
     # Check date format
     try:
@@ -153,6 +166,8 @@ if __name__ == '__main__':
                         help='path to files needed rename')
     parser.add_argument('-f', '--format', type=str, default='%Y-%m-%d %H.%M.%S',
                         help='new name format in python datetime')
+    parser.add_argument('-r', '--recursion', action='store_true', default=False,
+                        help='recursion rename all files in directory')
     parser.add_argument('-oi', '--only-image', action='store_true', default=False,
                         help='rename only for image type')
     parser.add_argument('-ov', '--only-video', action='store_true', default=False,
@@ -161,9 +176,10 @@ if __name__ == '__main__':
                         help='preview new filename without rename')
     parser.add_argument('-v', '--version', action='store_true', help='show version', default=False)
     args = vars(parser.parse_args())
-    file_path = args.get('path', '')
+    dir_path = args.get('path', '')
     date_format = args.get('format', '')
     file_datetime = args.get('datetime', '')
+    recursion = args.get('recursion', False)
     only_image = args.get('only_image', False)
     only_video = args.get('only_video', False)
     preview = args.get('preview', False)
@@ -181,4 +197,4 @@ if __name__ == '__main__':
         exit(0)
 
     # Get started
-    auto_rename()
+    auto_rename(dir_path)
