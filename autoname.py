@@ -137,7 +137,7 @@ def test_func() -> (bool, str):
     """
     # Check file path
     if not dir_path:
-        return False, 'file path need to be specified with -p argument'
+        return False, 'file path need to be specified with -d argument'
 
     if not os.path.exists(dir_path):
         return False, f'{dir_path} is not exist'
