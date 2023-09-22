@@ -12,7 +12,7 @@ from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
 
 # Define version
-Version = '0.2.0'
+Version = '0.2.1'
 
 # File Extension Definition
 Photos = ['.jpg', '.jpeg', '.heic', '.png', '.gif']
@@ -162,8 +162,8 @@ def print_version():
 if __name__ == '__main__':
     # Args analysis
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--path', type=str, default='',
-                        help='path to files needed rename')
+    parser.add_argument('-d', '--dir', type=str, default='',
+                        help='path to directory needed rename')
     parser.add_argument('-f', '--format', type=str, default='%Y-%m-%d %H.%M.%S',
                         help='new name format in python datetime')
     parser.add_argument('-r', '--recursion', action='store_true', default=False,
@@ -172,11 +172,11 @@ if __name__ == '__main__':
                         help='rename only for image type')
     parser.add_argument('-ov', '--only-video', action='store_true', default=False,
                         help='rename only for video type')
-    parser.add_argument('-pv', '--preview', action='store_true', default=False,
+    parser.add_argument('-p', '--preview', action='store_true', default=False,
                         help='preview new filename without rename')
     parser.add_argument('-v', '--version', action='store_true', help='show version', default=False)
     args = vars(parser.parse_args())
-    dir_path = args.get('path', '')
+    dir_path = args.get('dir', '')
     date_format = args.get('format', '')
     file_datetime = args.get('datetime', '')
     recursion = args.get('recursion', False)
