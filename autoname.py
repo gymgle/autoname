@@ -4,6 +4,7 @@
 import argparse
 import os.path
 import platform
+import re
 from datetime import datetime, timezone
 from sys import exit
 
@@ -12,7 +13,7 @@ from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
 
 # Define version
-Version = '0.2.1'
+Version = '0.3.0'
 
 # File Extension Definition
 Photos = ['.jpg', '.jpeg', '.heic', '.png', '.gif']
@@ -54,6 +55,9 @@ def rename_photo(filepath: str) -> bool:
     :param filepath: str, path to photo
     :return:
     """
+    if rename_with_datetime_from_filename(filepath):
+        return True
+
     with open(filepath, 'rb') as f:
         try:
             tags = exifread.process_file(f)
@@ -75,6 +79,9 @@ def rename_media(filepath: str) -> bool:
     :param filepath: str, path to video
     :return:
     """
+    if rename_with_datetime_from_filename(filepath):
+        return True
+
     with createParser(filepath) as ps:
         metadata = extractMetadata(ps)
     exif_dict = metadata.exportDictionary()['Metadata']
@@ -97,6 +104,22 @@ def rename_media(filepath: str) -> bool:
         ctime = min(dt_list)
         local_time = datetime.fromtimestamp(ctime)
     return rename_with_datetime(filepath, local_time)
+
+
+def rename_with_datetime_from_filename(filepath: str) -> bool:
+    """
+    Rename with the datetime from filename
+    :param filepath: str, path to file
+    :return: bool, True: rename success, False: no timestamp found in filename
+    """
+    # If regex option is enabled and the timestamp in filename is valid, rename it with the timestamp
+    if regex:
+        _, filename = os.path.split(filepath)
+        dt = datetime_from_filename(filename)
+        if dt:  # If timestamp is valid
+            rename_with_datetime(filepath, dt)
+            return True
+    return False
 
 
 def rename_with_datetime(filepath: str, exif_date: datetime) -> bool:
@@ -128,6 +151,35 @@ def rename_with_datetime(filepath: str, exif_date: datetime) -> bool:
     print('success:', os.path.basename(filepath), '->', os.path.basename(new_path))
 
     return True
+
+
+def datetime_from_filename(filename) -> datetime | None:
+    """
+    Extract datetime from filename
+    :param filename: str
+    :return: datetime object
+    """
+    # Photo names for Android: IMG_20240316_101520.jpg
+    # Video names for Android: VID_20240316_101520.mp4
+    # Exceptions: xxx_123456_20240316101520123.jpg
+    pattern = r'([12]\d{3})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])_?([01]\d|2[0-3])([0-5]\d)([0-5]\d)'
+    match = re.search(pattern, filename)
+
+    if match:
+        year = int(match.group(1))
+        month = int(match.group(2))
+        day = int(match.group(3))
+        hour = int(match.group(4))
+        minute = int(match.group(5))
+        second = int(match.group(6))
+
+        try:
+            dt = datetime(year, month, day, hour, minute, second)
+            return dt
+        except ValueError:
+            return None
+    else:
+        return None
 
 
 def test_func() -> (bool, str):
@@ -168,6 +220,8 @@ if __name__ == '__main__':
                         help='new name format in python datetime')
     parser.add_argument('-r', '--recursion', action='store_true', default=False,
                         help='recursion rename all files in directory')
+    parser.add_argument('-re', '--regex', action='store_true', default=True,
+                        help='extract timestamps from file name using regular expressions')
     parser.add_argument('-oi', '--only-image', action='store_true', default=False,
                         help='rename only for image type')
     parser.add_argument('-ov', '--only-video', action='store_true', default=False,
@@ -180,6 +234,7 @@ if __name__ == '__main__':
     date_format = args.get('format', '')
     file_datetime = args.get('datetime', '')
     recursion = args.get('recursion', False)
+    regex = args.get('regex', True)
     only_image = args.get('only_image', False)
     only_video = args.get('only_video', False)
     preview = args.get('preview', False)
