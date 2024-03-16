@@ -52,7 +52,7 @@ Build Windows/Linux/macOS executable binary file via PyInstaller.
 
 2. Prepare UPX (Optional)
 
-    Download UPX [Here](https://github.com/upx/upx/releases), put `upx.exe` (Windows) to project dir.
+    Download UPX [Here](https://github.com/upx/upx/releases), put `upx.exe` (Windows) to project root directory or your Python Virtual Env dir, eg. `venv\Scripts` for Windows.
 
 3. Package project
     ```shell
