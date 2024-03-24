@@ -6,11 +6,12 @@ import os.path
 import platform
 import re
 from datetime import datetime, timezone
-from sys import exit
+from sys import exit, stdout
 
 import exifread
 from hachoir.metadata import extractMetadata
 from hachoir.parser import createParser
+from loguru import logger
 
 # Define version
 Version = '0.3.0'
@@ -18,6 +19,10 @@ Version = '0.3.0'
 # File Extension Definition
 Photos = ['.jpg', '.jpeg', '.heic', '.png', '.gif']
 Videos = ['.mp4', '.mov']
+
+LOGGER_FORMAT = "<green>{time: YYYY-MM-DD HH:mm:ss}</green> - {level} - <level>{message}</level>"
+logger.remove()
+logger.add(stdout, colorize=True, format=LOGGER_FORMAT)
 
 
 def auto_rename(file_path: str) -> bool:
@@ -39,13 +44,13 @@ def auto_rename(file_path: str) -> bool:
                     continue
                 rename_media(abs_filename)
             else:
-                print('unsupported file format:', filename)
+                logger.warning(f'skip unsupported file: {filename}')
         elif os.path.isdir(abs_filename):
-            print('directory:', abs_filename)
+            logger.info(f'directory: {abs_filename}')
             if recursion:
                 auto_rename(abs_filename)
         else:
-            print('unknown file:', filename)
+            logger.warning(f'unknown file: {filename}')
     return True
 
 
@@ -62,7 +67,7 @@ def rename_photo(filepath: str) -> bool:
         try:
             tags = exifread.process_file(f)
         except Exception as e:
-            print(f'get exif tags from %s error: %s' % (filepath, e))
+            logger.error(f'get exif tags from %s error: %s' % (filepath, e))
             tags = dict()
 
     if 'EXIF DateTimeOriginal' in tags:
@@ -133,24 +138,23 @@ def rename_with_datetime(filepath: str, exif_date: datetime) -> bool:
     new_name = date_taken + os.path.splitext(filepath)[-1].lower()
     new_path = os.path.join(os.path.dirname(filepath), new_name)
     if filepath == new_path:  # Skip already in demanded name
-        print('skip:', os.path.basename(filepath))
+        logger.warning(f'skip: {os.path.basename(filepath)}')
         return True
     if os.path.basename(filepath).startswith(date_taken):  # Skip if a valid timestamp already in demanded name
-        print('skip:', os.path.basename(filepath))
+        logger.warning(f'skip: {os.path.basename(filepath)}')
         return True
     if preview:
-        print(os.path.basename(filepath), '->', os.path.basename(new_path))
+        logger.info(f'os.path.basename(filepath) -> {os.path.basename(new_path)}')
         return True
 
     # Dangerous Ops: Rename
     # Change name if the new path exist: add original filename after the date taken
     if os.path.exists(new_path):
         original_filename = os.path.basename(filepath)
-        print('same filename exist:', os.path.basename(filepath), '->', os.path.basename(new_path))
         new_name = '{date}_{org_filename}'.format(date=date_taken, org_filename=original_filename)
         new_path = os.path.join(os.path.dirname(filepath), new_name)
     os.rename(filepath, new_path)
-    print('success:', os.path.basename(filepath), '->', os.path.basename(new_path))
+    logger.success(f'{os.path.basename(filepath)} -> {os.path.basename(new_path)}')
 
     return True
 
@@ -210,7 +214,7 @@ def print_version():
     Print version info
     :return: None
     """
-    print(f'version {Version}')
+    logger.info(f'version {Version}')
 
 
 if __name__ == '__main__':
@@ -250,7 +254,7 @@ if __name__ == '__main__':
     # Test input is valid or not before processing
     ok, err = test_func()
     if not ok:
-        print(err)
+        logger.error(err)
         exit(0)
 
     # Get started
