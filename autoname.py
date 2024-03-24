@@ -135,17 +135,19 @@ def rename_with_datetime(filepath: str, exif_date: datetime) -> bool:
     if filepath == new_path:  # Skip already in demanded name
         print('skip:', os.path.basename(filepath))
         return True
+    if os.path.basename(filepath).startswith(date_taken):  # Skip if a valid timestamp already in demanded name
+        print('skip:', os.path.basename(filepath))
+        return True
     if preview:
         print(os.path.basename(filepath), '->', os.path.basename(new_path))
         return True
 
     # Dangerous Ops: Rename
-    # Change name if the new path exist: add the timestamp after the date taken
+    # Change name if the new path exist: add original filename after the date taken
     if os.path.exists(new_path):
+        original_filename = os.path.basename(filepath)
         print('same filename exist:', os.path.basename(filepath), '->', os.path.basename(new_path))
-        ts = datetime.now().timestamp() * 1000
-        new_name = '{date}-{timestamp}{ext}'.format(date=date_taken, timestamp=str(int(ts)),
-                                                    ext=os.path.splitext(filepath)[-1].lower())
+        new_name = '{date}_{org_filename}'.format(date=date_taken, org_filename=original_filename)
         new_path = os.path.join(os.path.dirname(filepath), new_name)
     os.rename(filepath, new_path)
     print('success:', os.path.basename(filepath), '->', os.path.basename(new_path))
