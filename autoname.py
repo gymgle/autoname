@@ -20,9 +20,7 @@ Version = '0.3.0'
 Photos = ['.jpg', '.jpeg', '.heic', '.png', '.gif']
 Videos = ['.mp4', '.mov']
 
-LOGGER_FORMAT = "<green>{time: YYYY-MM-DD HH:mm:ss}</green> - {level} - <level>{message}</level>"
-logger.remove()
-logger.add(stdout, colorize=True, format=LOGGER_FORMAT)
+LOGGER_FORMAT = "<green>{time: YYYY-MM-DD HH:mm:ss}</green> ｜ {level} ｜ <level>{message}</level>"
 
 
 def auto_rename(file_path: str) -> bool:
@@ -144,7 +142,7 @@ def rename_with_datetime(filepath: str, exif_date: datetime) -> bool:
         logger.warning(f'skip: {os.path.basename(filepath)}')
         return True
     if preview:
-        logger.info(f'os.path.basename(filepath) -> {os.path.basename(new_path)}')
+        logger.info(f'{os.path.basename(filepath)} -> {os.path.basename(new_path)}')
         return True
 
     # Dangerous Ops: Rename
@@ -209,12 +207,23 @@ def test_func() -> (bool, str):
     return True, 'tests passed'
 
 
+def init_logger(level: str = 'INFO') -> None:
+    """
+    Init logger
+    :return: None
+    """
+    logger.remove()
+    logger.add(stdout, colorize=True, format=LOGGER_FORMAT, level=level)
+    logger.add('rename_{time}.log', format=LOGGER_FORMAT, level=level,
+               rotation='10MB', encoding='utf-8', enqueue=True, compression='zip')
+
+
 def print_version():
     """
     Print version info
     :return: None
     """
-    logger.info(f'version {Version}')
+    print(f'version {Version}')
 
 
 if __name__ == '__main__':
@@ -233,7 +242,10 @@ if __name__ == '__main__':
     parser.add_argument('-ov', '--only-video', action='store_true', default=False,
                         help='rename only for video type')
     parser.add_argument('-p', '--preview', action='store_true', default=False,
-                        help='preview new filename without rename')
+                        help='preview new filenames without renaming')
+    parser.add_argument('-ll', '--loglevel', type=str, default='INFO',
+                        choices=('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'),
+                        help='set log level, default: INFO, others: DEBUG, WARNING, ERROR, CRITICAL')
     parser.add_argument('-v', '--version', action='store_true', help='show version', default=False)
     args = vars(parser.parse_args())
     dir_path = args.get('dir', '')
@@ -244,7 +256,10 @@ if __name__ == '__main__':
     only_image = args.get('only_image', False)
     only_video = args.get('only_video', False)
     preview = args.get('preview', False)
+    logger_level = args.get('loglevel', 'INFO')
     version = args.get('version', False)
+
+    init_logger(logger_level)
 
     # Show version
     if version:
