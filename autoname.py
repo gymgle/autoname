@@ -20,7 +20,7 @@ Version = '0.3.0'
 Photos = ['.jpg', '.jpeg', '.heic', '.png', '.gif']
 Videos = ['.mp4', '.mov']
 
-LOGGER_FORMAT = "<green>{time: YYYY-MM-DD HH:mm:ss}</green> ｜ {level} ｜ <level>{message}</level>"
+LOGGER_FORMAT = "<green>{time: YYYY-MM-DD HH:mm:ss}</green> ｜ <level>{message}</level>"
 
 
 def auto_rename(file_path: str) -> bool:
@@ -44,8 +44,8 @@ def auto_rename(file_path: str) -> bool:
             else:
                 logger.warning(f'skip unsupported file: {filename}')
         elif os.path.isdir(abs_filename):
-            logger.info(f'directory: {abs_filename}')
             if recursion:
+                logger.info(f'directory: {abs_filename}')
                 auto_rename(abs_filename)
         else:
             logger.warning(f'unknown file: {filename}')
@@ -115,9 +115,15 @@ def rename_with_datetime_from_filename(filepath: str) -> bool:
     :param filepath: str, path to file
     :return: bool, True: rename success, False: no timestamp found in filename
     """
+    # If filename already has format as given by date_format, skip
+    _, filename = os.path.split(filepath)
+    name, _ = os.path.splitext(filename)
+    if is_given_format(name):
+        logger.info(f'skip: {filename}')
+        return True
+
     # If regex option is enabled and the timestamp in filename is valid, rename it with the timestamp
     if regex:
-        _, filename = os.path.split(filepath)
         dt = datetime_from_filename(filename)
         if dt:  # If timestamp is valid
             rename_with_datetime(filepath, dt)
@@ -184,6 +190,19 @@ def datetime_from_filename(filename) -> datetime | None:
             return None
     else:
         return None
+
+
+def is_given_format(filename_without_ext: str) -> bool:
+    """
+    Check if the filename has format as given by date_format
+    :param filename_without_ext: str
+    :return: bool
+    """
+    try:
+        datetime.strptime(filename_without_ext, date_format)
+        return True
+    except ValueError:
+        return False
 
 
 def test_func() -> (bool, str):
