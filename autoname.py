@@ -17,7 +17,7 @@ from loguru import logger
 Version = '0.3.0'
 
 # File Extension Definition
-Photos = ['.jpg', '.jpeg', '.heic', '.png', '.gif']
+Photos = ['.jpg', '.jpeg', '.heic', '.png', '.gif', '.nef']
 Videos = ['.mp4', '.mov']
 
 LOGGER_FORMAT = "<green>{time: YYYY-MM-DD HH:mm:ss}</green> ｜ <level>{message}</level>"
@@ -139,7 +139,7 @@ def rename_with_datetime(filepath: str, exif_date: datetime) -> bool:
     :return: bool: True/False
     """
     date_taken = exif_date.strftime(date_format)
-    new_name = date_taken + os.path.splitext(filepath)[-1].lower()
+    new_name = date_taken + os.path.splitext(filepath)[-1]
     new_path = os.path.join(os.path.dirname(filepath), new_name)
     if filepath == new_path:  # Skip already in demanded name
         logger.warning(f'skip: {os.path.basename(filepath)}')
