@@ -6,6 +6,7 @@ import os.path
 import platform
 import re
 from datetime import datetime, timezone
+from multiprocessing import freeze_support
 from sys import exit, stdout
 
 import exifread
@@ -246,6 +247,7 @@ def print_version():
 
 
 if __name__ == '__main__':
+    freeze_support()
     # Args analysis
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--dir', type=str, default='',
