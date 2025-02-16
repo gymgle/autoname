@@ -5,7 +5,7 @@ import argparse
 import os.path
 import platform
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from multiprocessing import freeze_support
 from sys import exit, stdout
 
@@ -15,13 +15,13 @@ from hachoir.parser import createParser
 from loguru import logger
 
 # Define version
-Version = '0.3.0'
+Version = '0.4.0'
 
 # File Extension Definition
 Photos = ['.jpg', '.jpeg', '.heic', '.png', '.gif', '.nef']
 Videos = ['.mp4', '.mov']
 
-LOGGER_FORMAT = "<green>{time: YYYY-MM-DD HH:mm:ss}</green> ｜ <level>{message}</level>"
+LOGGER_FORMAT = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> ｜ <level>{message}</level>"
 
 
 def auto_rename(file_path: str) -> bool:
@@ -30,10 +30,21 @@ def auto_rename(file_path: str) -> bool:
     :param file_path: str, path to directory
     :return: bool: success
     """
+    # User specified extensions
+    specified_ext_list = []
+    if extensions:  # If specified extensions option is enabled, add dot to user specified extensions
+        specified_ext_list = [f'.{ext}' for ext in extensions.lower().split(',')]
+
+    # Traverse and rename files
     for filename in os.listdir(file_path):
         abs_filename = os.path.join(file_path, filename)
+        # Handling file photo and video files
         if os.path.isfile(abs_filename):
             file_ext = os.path.splitext(filename)[-1].lower()
+            # If specified extensions option is enabled, only rename files with specified extensions
+            if specified_ext_list and file_ext not in specified_ext_list:
+                continue
+
             if file_ext in Photos:
                 if only_video:
                     continue
@@ -41,9 +52,10 @@ def auto_rename(file_path: str) -> bool:
             elif file_ext in Videos:
                 if only_image:
                     continue
-                rename_media(abs_filename)
+                rename_video(abs_filename)
             else:
                 logger.warning(f'skip unsupported file: {filename}')
+        # Handling directories
         elif os.path.isdir(abs_filename):
             if recursion:
                 logger.info(f'directory: {abs_filename}')
@@ -55,13 +67,15 @@ def auto_rename(file_path: str) -> bool:
 
 def rename_photo(filepath: str) -> bool:
     """
-    Rename photo with EXIF
+    Rename photo file according to priority
     :param filepath: str, path to photo
-    :return:
+    :return: bool, True: rename success, False: no timestamp found
     """
+    # Priority 1. Rename with datetime from filename
     if rename_with_datetime_from_filename(filepath):
         return True
 
+    # Priority 2. Rename with EXIF Info
     with open(filepath, 'rb') as f:
         try:
             tags = exifread.process_file(f)
@@ -72,20 +86,33 @@ def rename_photo(filepath: str) -> bool:
     if 'EXIF DateTimeOriginal' in tags:
         exif_date = str(tags['EXIF DateTimeOriginal'])
         rename_with_datetime(filepath, datetime.strptime(exif_date, '%Y:%m:%d %H:%M:%S'))
+
+    # Priority 3. Rename with metadata or file attributes
     else:
         return rename_media(filepath)
     return True
 
 
-def rename_media(filepath: str) -> bool:
+def rename_video(filepath: str) -> bool:
     """
-    Rename media with metadata
+    Rename video file according to priority
     :param filepath: str, path to video
-    :return:
+    :return: bool, True: rename success, False: no timestamp found
     """
+    # Priority 1. Rename with datetime from filename
     if rename_with_datetime_from_filename(filepath):
         return True
 
+    # Priority 2. Rename with metadata or file attributes
+    return rename_media(filepath)
+
+
+def rename_media(filepath: str) -> bool:
+    """
+    Rename media file with metadata or file attributes
+    :param filepath: str, path to media file
+    :return: bool, True: rename success, False: no timestamp found
+    """
     with createParser(filepath) as ps:
         metadata = extractMetadata(ps)
     exif_dict = metadata.exportDictionary()['Metadata']
@@ -97,7 +124,7 @@ def rename_media(filepath: str) -> bool:
     if ts > 0:
         utc_time = datetime.strptime(exif_date, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
         local_time = utc_time.astimezone(datetime.now().astimezone().tzinfo)
-    else:  # no metadata found, use the min timestamp in birthtime / ctime / mtime
+    else:  # no metadata found, use the min timestamp in birthtime / ctime / mtime / filename timestamp
         file_stat = os.stat(filepath)
         dt_list = []
         for i in [int(file_stat.st_ctime), int(file_stat.st_mtime)]:
@@ -105,6 +132,13 @@ def rename_media(filepath: str) -> bool:
                 dt_list.append(i)
         if platform.system().lower() == 'darwin':  # birthtime in macOS
             dt_list.append(int(file_stat.st_birthtime))
+
+        # Try to get timestamp from filename
+        _, filename = os.path.split(filepath)
+        dt_from_filename = datetime_from_filename(filename)
+        if dt_from_filename:
+            dt_list.append(int(dt_from_filename.timestamp()))
+
         ctime = min(dt_list)
         local_time = datetime.fromtimestamp(ctime)
     return rename_with_datetime(filepath, local_time)
@@ -116,15 +150,17 @@ def rename_with_datetime_from_filename(filepath: str) -> bool:
     :param filepath: str, path to file
     :return: bool, True: rename success, False: no timestamp found in filename
     """
-    # If filename already has format as given by date_format, skip
     _, filename = os.path.split(filepath)
-    name, _ = os.path.splitext(filename)
-    if is_given_format(name):
-        logger.info(f'skip: {filename}')
-        return True
 
-    # If regex option is enabled and the timestamp in filename is valid, rename it with the timestamp
-    if regex:
+    # If force_rename option not enabled, SKIP if the filename is already in the desired format
+    if not force_rename:
+        name, _ = os.path.splitext(filename)
+        if is_given_format(name):
+            logger.info(f'skip: {filename}')
+            return True
+
+    # If disable_regex option is not enabled, try to rename it with the timestamp in filename
+    if not disable_regex:
         dt = datetime_from_filename(filename)
         if dt:  # If timestamp is valid
             rename_with_datetime(filepath, dt)
@@ -170,10 +206,11 @@ def datetime_from_filename(filename) -> datetime | None:
     :param filename: str
     :return: datetime object
     """
-    # Photo names for Android: IMG_20240316_101520.jpg
-    # Video names for Android: VID_20240316_101520.mp4
-    # Exceptions: xxx_123456_20240316101520123.jpg
-    pattern = r'([12]\d{3})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])_?([01]\d|2[0-3])([0-5]\d)([0-5]\d)'
+    # Photo name for Android: IMG_20240316_101520.jpg
+    # Video name for Android: VID_20240316_101520.mp4
+    # Files name for OneDrive Backup: 20240316_101520666_iOS.heic
+    # Exception: xxx_123456_20240316101520123.jpg
+    pattern = r'([12]\d{3})(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])[_\-\s]?([01]\d|2[0-3])([0-5]\d)([0-5]\d)(\d{3})?'
     match = re.search(pattern, filename)
 
     if match:
@@ -183,9 +220,12 @@ def datetime_from_filename(filename) -> datetime | None:
         hour = int(match.group(4))
         minute = int(match.group(5))
         second = int(match.group(6))
+        microsecond = int(match.group(7)) if match.group(7) else 0
 
         try:
-            dt = datetime(year, month, day, hour, minute, second)
+            dt = datetime(year, month, day, hour, minute, second, microsecond)
+            if regex_offset:
+                dt = dt + timedelta(hours=regex_offset)
             return dt
         except ValueError:
             return None
@@ -218,11 +258,23 @@ def test_func() -> (bool, str):
     if not os.path.exists(dir_path):
         return False, f'{dir_path} is not exist'
 
+    # Check log path
+    if log_path:
+        if not os.path.exists(log_path):
+            return False, f'log path {log_path} is not exist'
+
     # Check date format
     try:
         datetime.now().strftime(date_format)
     except ValueError as e:
         return False, f'date format invalid: {date_format}, {e}'
+
+    # Check specified extensions
+    if extensions:
+        for ext in extensions.lower().split(','):
+            ext_with_dot = f'.{ext}'
+            if ext_with_dot not in Photos + Videos:
+                return False, f'extension {ext} is not supported'
 
     return True, 'tests passed'
 
@@ -233,9 +285,12 @@ def init_logger(level: str = 'INFO') -> None:
     :return: None
     """
     logger.remove()
+    # Output to console
     logger.add(stdout, colorize=True, format=LOGGER_FORMAT, level=level)
-    logger.add('rename_{time}.log', format=LOGGER_FORMAT, level=level,
-               rotation='10MB', encoding='utf-8', enqueue=True, compression='zip')
+    # Output to log file
+    log_file = os.path.join(log_path, 'autoname_{time}.log') if log_path else 'autoname_{time}.log'
+    logger.add(log_file, format=LOGGER_FORMAT, level=level, rotation='10MB', encoding='utf-8',
+               enqueue=True, compression='zip')
 
 
 def print_version():
@@ -247,40 +302,55 @@ def print_version():
 
 
 if __name__ == '__main__':
+    # Fix multiprocessing issue in Windows with PyInstaller
     freeze_support()
+
     # Args analysis
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--dir', type=str, default='',
-                        help='path to directory needed rename')
+                        help='path to the directory that needs renaming')
     parser.add_argument('-f', '--format', type=str, default='%Y-%m-%d %H.%M.%S',
                         help='new name format in python datetime')
     parser.add_argument('-r', '--recursion', action='store_true', default=False,
-                        help='recursion rename all files in directory')
-    parser.add_argument('-re', '--regex', action='store_true', default=True,
-                        help='extract timestamps from file name using regular expressions')
-    parser.add_argument('-oi', '--only-image', action='store_true', default=False,
-                        help='rename only for image type')
-    parser.add_argument('-ov', '--only-video', action='store_true', default=False,
-                        help='rename only for video type')
+                        help='recursively rename all files in the subdirectories, disabled by default')
     parser.add_argument('-p', '--preview', action='store_true', default=False,
-                        help='preview new filenames without renaming')
+                        help='preview new filenames without actually renaming them')
+    parser.add_argument('-dr', '--disable_regex', action='store_true', default=False,
+                        help='timestamp is extracted from the filename by default. Enable this option to skip filename regex extraction')
+    parser.add_argument('-ext', '--extension', type=str, default='',
+                        help='only rename files in specified extensions, separate extensions with a comma, e.g. "jpg,png,mov"')
+    parser.add_argument('-fr', '--force_rename', action='store_true', default=False,
+                        help='force rename even if the filename is already in the desired format, disabled by default')
     parser.add_argument('-ll', '--loglevel', type=str, default='INFO',
                         choices=('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'),
-                        help='set log level, default: INFO, others: DEBUG, WARNING, ERROR, CRITICAL')
-    parser.add_argument('-v', '--version', action='store_true', help='show version', default=False)
+                        help='set log level, default: INFO, options: DEBUG, WARNING, ERROR, CRITICAL')
+    parser.add_argument('-lp', '--log_path', type=str, default='',
+                        help='log file path, default: current directory')
+    parser.add_argument('-ro', '--regex_offset', type=float, default=0,
+                        help='offset in hours when using regex from filename, e.g. 8 for UTC+8 if filename timezone is UTC')
+    parser.add_argument('-oi', '--only-image', action='store_true', default=False,
+                        help='rename only for image files, disabled by default')
+    parser.add_argument('-ov', '--only-video', action='store_true', default=False,
+                        help='rename only for video files, disabled by default')
+    parser.add_argument('-v', '--version', action='store_true', default=False,
+                        help='show version')
+
     args = vars(parser.parse_args())
     dir_path = args.get('dir', '')
     date_format = args.get('format', '')
-    file_datetime = args.get('datetime', '')
     recursion = args.get('recursion', False)
-    regex = args.get('regex', True)
+    preview = args.get('preview', False)
+    disable_regex = args.get('disable_regex', False)
+    extensions = args.get('extension', '')
+    force_rename = args.get('force_rename', False)
+    log_level = args.get('loglevel', 'INFO')
+    log_path = args.get('log_path', '')
+    regex_offset = args.get('regex_offset', 0)
     only_image = args.get('only_image', False)
     only_video = args.get('only_video', False)
-    preview = args.get('preview', False)
-    logger_level = args.get('loglevel', 'INFO')
     version = args.get('version', False)
 
-    init_logger(logger_level)
+    init_logger(log_level)
 
     # Show version
     if version:
