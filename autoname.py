@@ -83,7 +83,7 @@ def rename_photo(filepath: str) -> bool:
             logger.error(f'get exif tags from %s error: %s' % (filepath, e))
             tags = dict()
 
-    if 'EXIF DateTimeOriginal' in tags:
+    if 'EXIF DateTimeOriginal' in tags and str(tags['EXIF DateTimeOriginal']):
         exif_date = str(tags['EXIF DateTimeOriginal'])
         rename_with_datetime(filepath, datetime.strptime(exif_date, '%Y:%m:%d %H:%M:%S'))
 
@@ -113,13 +113,13 @@ def rename_media(filepath: str) -> bool:
     :param filepath: str, path to media file
     :return: bool, True: rename success, False: no timestamp found
     """
-    with createParser(filepath) as ps:
-        metadata = extractMetadata(ps)
-    exif_dict = metadata.exportDictionary()['Metadata']
-    exif_date = str(exif_dict.get('Creation date', '1904-01-01 00:00:00'))  # maybe before 1970 (1904-01-01...)
     try:
+        with createParser(filepath) as ps:
+            metadata = extractMetadata(ps)
+        exif_dict = metadata.exportDictionary()['Metadata']
+        exif_date = str(exif_dict.get('Creation date', '1904-01-01 00:00:00'))  # maybe before 1970 (1904-01-01...)
         ts = datetime.strptime(exif_date, '%Y-%m-%d %H:%M:%S').timestamp()
-    except OSError:
+    except Exception as e:
         ts = 0.0
     if ts > 0:
         utc_time = datetime.strptime(exif_date, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
